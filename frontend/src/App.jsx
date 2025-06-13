@@ -1,10 +1,12 @@
-import Dashboard from "./pages/Dashboard";
-import LoginPage from "./pages/LoginPage";
+import TelegramLogin from './components/TelegramLogin';
 
 function App() {
-  const uuid = localStorage.getItem("uuid");
-
-  return uuid ? <Dashboard /> : <LoginPage />;
+  return (
+    <div>
+      <h1>Добро пожаловать</h1>
+      <TelegramLogin />
+    </div>
+  );
 }
 
 export default App;
