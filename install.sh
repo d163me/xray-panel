@@ -1,16 +1,18 @@
 #!/bin/bash
 
-set -e
-
-echo "[1/3] Обновляем репозиторий..."
-cd /opt/marzban-fork
-git pull
+echo "[1/3] Обновляем код с GitHub..."
+cd /opt/marzban-fork || exit
+git pull || exit
 
 echo "[2/3] Обновляем базу данных..."
-source backend/venv/bin/activate
-python3 -c "from models import db; from app_combined_server import app; with app.app_context(): db.create_all()"
+python3 <<EOF
+from app_combined_server import app
+from models import db
+with app.app_context():
+    db.create_all()
+EOF
 
-echo "[3/3] Перезапускаем сервис..."
+echo "[3/3] Перезапускаем backend..."
 systemctl restart marzban-backend
 
-echo "[✔] Установка и перезапуск завершены."
+echo "[✔] Установка завершена. Проверьте http://your.domain.com"
