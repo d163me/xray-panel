@@ -1,85 +1,130 @@
 #!/bin/bash
+
 set -e
 
-read -p "Введите домен (например, proxy.example.com): " DOMAIN
-read -p "Введите email для Let's Encrypt: " EMAIL
-read -p "Введите порт панели (по умолчанию 8880): " PORT
-PORT=${PORT:-8880}
+echo "🔧 Введите ваш домен (example.com):"
+read DOMAIN
 
-apt update && apt install -y python3 python3-venv nginx curl git unzip certbot python3-certbot-nginx socat
+echo "📦 Установка зависимостей..."
+apt update
+apt install -y nginx certbot python3-certbot-nginx git curl unzip python3-venv
 
-# Установка Xray
-mkdir -p /opt/xray-core && cd /opt/xray-core
-curl -LO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip -o Xray-linux-64.zip && chmod +x xray
+echo "📁 Установка Xray..."
+mkdir -p /opt/xray-core
+cd /opt/xray-core
+curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+unzip xray.zip && rm xray.zip
+chmod +x xray
 
-cat > /etc/systemd/system/xray.service << EOF
-[Unit]
-Description=Xray Service
-After=network.target
-[Service]
-ExecStart=/opt/xray-core/xray -config /opt/xray-core/config.json
-Restart=on-failure
-User=nobody
-[Install]
-WantedBy=multi-user.target
+echo "📦 Установка панели..."
+mkdir -p /opt/xray-panel/templates
+cat > /opt/xray-panel/templates/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>Xray Panel</title></head>
+<body>
+  <h1>Панель работает!</h1>
+  <p>vless://UUID@$DOMAIN:443?encryption=none&security=tls&type=ws&host=$DOMAIN&path=%2Fvless#Xray</p>
+</body>
+</html>
 EOF
 
-cat > /opt/xray-core/config.json << EOF
+cat > /opt/xray-panel/panel.py <<EOF
+from flask import Flask, render_template
+app = Flask(__name__, template_folder="templates")
+@app.route("/")
+def index():
+    return render_template("index.html")
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8880)
+EOF
+
+echo "📦 Установка Python-зависимостей..."
+python3 -m venv /opt/xray-panel/venv
+/opt/xray-panel/venv/bin/pip install flask
+
+echo "🧾 Генерация UUID..."
+UUID=\$(cat /proc/sys/kernel/random/uuid)
+echo "UUID: \$UUID"
+
+cat > /opt/xray-core/config.json <<EOF
 {
-  "inbounds": [
-    {
-      "port": 443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "ws",
-        "wsSettings": {
-          "path": "/vless"
-        }
-      }
+  "inbounds": [{
+    "port": 10000,
+    "protocol": "vless",
+    "settings": {
+      "clients": [{"id": "\$UUID"}],
+      "decryption": "none"
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": {"path": "/vless"}
     }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
+  }],
+  "outbounds": [{"protocol": "freedom"}]
 }
 EOF
 
-# Панель
-cd /opt
-rm -rf xray-panel
-git clone https://github.com/d163me/xray-panel.git
-cd xray-panel
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-cat > /etc/systemd/system/xray-panel.service << EOF
+echo "⚙️ Настройка systemd для Xray..."
+cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
-Description=Xray Web Panel
+Description=Xray Service
 After=network.target
+
 [Service]
-ExecStart=/opt/xray-panel/venv/bin/python3 app.py
-WorkingDirectory=/opt/xray-panel
-Restart=always
-User=root
+ExecStart=/opt/xray-core/xray -config /opt/xray-core/config.json
+Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Nginx конфигурация
-cat > /etc/nginx/sites-available/xray << EOF
+echo "⚙️ Настройка systemd для панели..."
+cat > /etc/systemd/system/xray-panel.service <<EOF
+[Unit]
+Description=Xray Panel
+After=network.target
+
+[Service]
+ExecStart=/opt/xray-panel/venv/bin/python /opt/xray-panel/panel.py
+WorkingDirectory=/opt/xray-panel
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "⚙️ Настройка Nginx..."
+cat > /etc/nginx/sites-available/xray <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+EOF
+
+ln -s /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+
+echo "🔒 Получение SSL сертификата..."
+certbot --nginx --non-interactive --agree-tos --email admin@$DOMAIN -d $DOMAIN
+
+echo "🔁 Настройка HTTPS в Nginx..."
+cat > /etc/nginx/sites-available/xray <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
     return 301 https://\$host\$request_uri;
 }
+
 server {
     listen 443 ssl;
     server_name $DOMAIN;
@@ -88,7 +133,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     location /vless {
-        proxy_pass http://127.0.0.1:443;
+        proxy_pass http://127.0.0.1:10000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -96,7 +141,7 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:$PORT;
+        proxy_pass http://127.0.0.1:8880;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -104,218 +149,13 @@ server {
 }
 EOF
 
-ln -sf /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
-nginx -t && systemctl restart nginx
+nginx -t && systemctl reload nginx
 
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL || true
-
+echo "🚀 Запуск служб..."
 systemctl daemon-reexec
-systemctl enable xray --now
-systemctl enable xray-panel --now
+systemctl daemon-reload
+systemctl enable --now xray
+systemctl enable --now xray-panel
 
-echo ""
 echo "✅ Установка завершена: https://$DOMAIN"
-
-# === Проверка DNS ===
-echo "🔍 Проверка, указывает ли домен $domain на текущий IP..."
-current_ip=$(curl -s https://ipinfo.io/ip)
-domain_ip=$(dig +short $domain | tail -n1)
-
-if [ "$current_ip" != "$domain_ip" ]; then
-    echo "❌ Домен $domain не указывает на IP $current_ip (а указывает на $domain_ip)"
-    echo "Проверь DNS-запись типа A и повторите установку"
-    exit 1
-fi
-
-# === Временный конфиг nginx ===
-echo "⚙️ Настройка временного HTTP-сервера для Let's Encrypt..."
-mkdir -p /var/www/html
-echo "ok" > /var/www/html/index.html
-
-cat > /etc/nginx/sites-enabled/temp-cert.conf <<EOF
-server {
-    listen 80;
-    server_name $domain;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location / {
-        return 200 'OK';
-        add_header Content-Type text/plain;
-    }
-}
-EOF
-
-nginx -t && systemctl restart nginx
-
-# === Получение сертификата ===
-echo "🔐 Выпускаем сертификат Let's Encrypt для $domain..."
-certbot certonly --webroot -w /var/www/html -d $domain --agree-tos -m admin@$domain --non-interactive
-
-# === Удаление временного конфига ===
-rm -f /etc/nginx/sites-enabled/temp-cert.conf
-systemctl reload nginx
-
-
-/bin/bash
-set -e
-
-read -p "Введите домен (например, proxy.example.com): " DOMAIN
-read -p "Введите email для Let's Encrypt: " EMAIL
-read -p "Введите порт панели (по умолчанию 8880): " PORT
-PORT=${PORT:-8880}
-
-apt update && apt install -y python3 python3-venv nginx curl git unzip certbot python3-certbot-nginx socat
-
-# Установка Xray
-mkdir -p /opt/xray-core && cd /opt/xray-core
-curl -LO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip -o Xray-linux-64.zip && chmod +x xray
-
-cat > /etc/systemd/system/xray.service << EOF
-[Unit]
-Description=Xray Service
-After=network.target
-[Service]
-ExecStart=/opt/xray-core/xray -config /opt/xray-core/config.json
-Restart=on-failure
-User=nobody
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /opt/xray-core/config.json << EOF
-{
-  "inbounds": [
-    {
-      "port": 443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "ws",
-        "wsSettings": {
-          "path": "/vless"
-        }
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
-}
-EOF
-
-# Панель
-cd /opt
-rm -rf xray-panel
-git clone https://github.com/d163me/xray-panel.git
-cd xray-panel
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-cat > /etc/systemd/system/xray-panel.service << EOF
-[Unit]
-Description=Xray Web Panel
-After=network.target
-[Service]
-ExecStart=/opt/xray-panel/venv/bin/python3 app.py
-WorkingDirectory=/opt/xray-panel
-Restart=always
-User=root
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Nginx конфигурация
-cat > /etc/nginx/sites-available/xray << EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    location /vless {
-        proxy_pass http://127.0.0.1:443;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
-nginx -t && systemctl restart nginx
-
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL || true
-
-systemctl daemon-reexec
-systemctl enable xray --now
-systemctl enable xray-panel --now
-
-echo ""
-echo "✅ Установка завершена: https://$DOMAIN"
-
-# === Проверка DNS ===
-echo "🔍 Проверка, указывает ли домен $domain на текущий IP..."
-current_ip=$(curl -s https://ipinfo.io/ip)
-domain_ip=$(dig +short $domain | tail -n1)
-
-if [ "$current_ip" != "$domain_ip" ]; then
-    echo "❌ Домен $domain не указывает на IP $current_ip (а указывает на $domain_ip)"
-    echo "Проверь DNS-запись типа A и повторите установку"
-    exit 1
-fi
-
-# === Временный конфиг nginx ===
-echo "⚙️ Настройка временного HTTP-сервера для Let's Encrypt..."
-mkdir -p /var/www/html
-echo "ok" > /var/www/html/index.html
-
-cat > /etc/nginx/sites-enabled/temp-cert.conf <<EOF
-server {
-    listen 80;
-    server_name $domain;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location / {
-        return 200 'OK';
-        add_header Content-Type text/plain;
-    }
-}
-EOF
-
-nginx -t && systemctl restart nginx
-
-# === Получение сертификата ===
-echo "🔐 Выпускаем сертификат Let's Encrypt для $domain..."
-certbot certonly --webroot -w /var/www/html -d $domain --agree-tos -m admin@$domain --non-interactive
-
-# === Удаление временного конфига ===
-rm -f /etc/nginx/sites-enabled/temp-cert.conf
-systemctl reload nginx
-
+echo "🔗 VLESS: vless://\$UUID@$DOMAIN:443?encryption=none&security=tls&type=ws&host=$DOMAIN&path=%2Fvless#Xray"
