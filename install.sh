@@ -115,3 +115,46 @@ systemctl enable xray-panel --now
 
 echo ""
 echo "✅ Установка завершена: https://$DOMAIN"
+
+# === Проверка DNS ===
+echo "🔍 Проверка, указывает ли домен $domain на текущий IP..."
+current_ip=$(curl -s https://ipinfo.io/ip)
+domain_ip=$(dig +short $domain | tail -n1)
+
+if [ "$current_ip" != "$domain_ip" ]; then
+    echo "❌ Домен $domain не указывает на IP $current_ip (а указывает на $domain_ip)"
+    echo "Проверь DNS-запись типа A и повторите установку"
+    exit 1
+fi
+
+# === Временный конфиг nginx ===
+echo "⚙️ Настройка временного HTTP-сервера для Let's Encrypt..."
+mkdir -p /var/www/html
+echo "ok" > /var/www/html/index.html
+
+cat > /etc/nginx/sites-enabled/temp-cert.conf <<EOF
+server {
+    listen 80;
+    server_name $domain;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 200 'OK';
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+nginx -t && systemctl restart nginx
+
+# === Получение сертификата ===
+echo "🔐 Выпускаем сертификат Let's Encrypt для $domain..."
+certbot certonly --webroot -w /var/www/html -d $domain --agree-tos -m admin@$domain --non-interactive
+
+# === Удаление временного конфига ===
+rm -f /etc/nginx/sites-enabled/temp-cert.conf
+systemctl reload nginx
+
