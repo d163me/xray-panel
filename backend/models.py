@@ -9,3 +9,11 @@ class Invite(db.Model):
     uses = db.Column(db.Integer, default=0)
     expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=db.func.now())
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
+    first_name = db.Column(db.String)
+    username = db.Column(db.String)
+    uuid = db.Column(db.String, unique=True)
+    role = db.Column(db.String, default='user')  # 'user', 'vip', 'admin'
+    created_at = db.Column(db.DateTime, default=db.func.now())
