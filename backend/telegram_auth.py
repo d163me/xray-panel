@@ -1,10 +1,8 @@
 from flask import request, jsonify
 from app_combined_server import app, db
 from models import User, InviteCode
-import hashlib
-import hmac
-import time
-import uuid as uuidlib
+import hashlib, hmac, uuid
+from datetime import datetime
 
 BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
 
@@ -36,13 +34,8 @@ def telegram_login():
     if not invite or (invite.expires_at and invite.expires_at < datetime.utcnow()) or (invite.max_uses and invite.uses >= invite.max_uses):
         return {"error": "invalid invite"}, 400
 
-    new_user = User(
-        uuid=str(uuidlib.uuid4()),
-        role="user",
-        username=user_id
-    )
+    new_user = User(uuid=str(uuid.uuid4()), username=user_id, role=invite.role)
     invite.uses += 1
-    invite.used_by.append(new_user.uuid)
 
     db.session.add(new_user)
     db.session.commit()

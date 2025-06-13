@@ -1,15 +1,17 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from models import db  # Импортируем db отсюда!
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+db.init_app(app)  # Вот это обязательно!
 CORS(app)
-db = SQLAlchemy(app)
 
-# Импортируем API-маршруты
+with app.app_context():
+    db.create_all()
+
 from admin_api_routes import *
 from invite_api import *
 from traffic_api import *
