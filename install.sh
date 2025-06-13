@@ -2,20 +2,17 @@
 set -e
 
 read -p "Введите домен (например, proxy.example.com): " DOMAIN
-DOMAIN=${DOMAIN:-proxy.example.com}
 read -p "Введите email для Let's Encrypt: " EMAIL
-EMAIL=${EMAIL:-admin@$DOMAIN}
 read -p "Введите порт панели (по умолчанию 8880): " PORT
 PORT=${PORT:-8880}
 
-apt update && apt install -y python3 python3-venv nginx curl socat git unzip
+apt update && apt install -y python3 python3-venv nginx curl git unzip certbot python3-certbot-nginx socat
 
 # Установка Xray
 mkdir -p /opt/xray-core && cd /opt/xray-core
 curl -LO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
 unzip -o Xray-linux-64.zip && chmod +x xray
 
-# Сервис Xray
 cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -28,7 +25,6 @@ User=nobody
 WantedBy=multi-user.target
 EOF
 
-# Конфиг Xray
 cat > /opt/xray-core/config.json << EOF
 {
   "inbounds": [
@@ -77,12 +73,12 @@ User=root
 WantedBy=multi-user.target
 EOF
 
-# nginx
+# Nginx конфигурация
 cat > /etc/nginx/sites-available/xray << EOF
 server {
     listen 80;
     server_name $DOMAIN;
-    return 301 https://$host$request_uri;
+    return 301 https://\$host\$request_uri;
 }
 server {
     listen 443 ssl;
@@ -94,16 +90,16 @@ server {
     location /vless {
         proxy_pass http://127.0.0.1:443;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
+        proxy_set_header Host \$host;
     }
 
     location / {
         proxy_pass http://127.0.0.1:$PORT;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
 EOF
@@ -111,8 +107,6 @@ EOF
 ln -sf /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
 nginx -t && systemctl restart nginx
 
-# SSL
-apt install -y certbot python3-certbot-nginx
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL || true
 
 systemctl daemon-reexec
