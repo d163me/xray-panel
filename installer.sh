@@ -62,7 +62,7 @@ echo "[+] Настройка nginx..."
 cat > /etc/nginx/sites-enabled/marzban <<EOF
 server {
     listen 80;
-    server_name your.domain.com;
+    server_name hydrich.online;
 
     location / {
         root /opt/marzban-fork/frontend/dist;
