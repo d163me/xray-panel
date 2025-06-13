@@ -12,7 +12,7 @@ echo "[+] Установка зависимостей..."
 apt install -y git curl python3 python3-venv python3-pip nginx sqlite3
 
 echo "[+] Клонируем проект..."
-git clone https://github.com/YOUR_USERNAME/marzban-fork.git /opt/marzban-fork
+git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
 cd /opt/marzban-fork
 
 echo "[+] Настройка Python backend..."
