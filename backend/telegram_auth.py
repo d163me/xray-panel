@@ -6,7 +6,7 @@ import hmac
 import time
 import uuid as uuidlib
 
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
 
 def check_telegram_auth(data):
     auth_data = data.copy()

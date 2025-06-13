@@ -1,14 +1,18 @@
 from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class Invite(db.Model):
+
+class InviteCode(db.Model):  # используется в telegram_auth.py
+    __tablename__ = 'invite'
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String, unique=True, nullable=False)
-    role = db.Column(db.String, default='user')  # 👈 добавлено
+    role = db.Column(db.String, default='user')
     max_uses = db.Column(db.Integer, nullable=False)
     uses = db.Column(db.Integer, default=0)
     expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=db.func.now())
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
@@ -17,6 +21,8 @@ class User(db.Model):
     uuid = db.Column(db.String, unique=True)
     role = db.Column(db.String, default='user')  # 'user', 'vip', 'admin'
     created_at = db.Column(db.DateTime, default=db.func.now())
+
+
 class Server(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
