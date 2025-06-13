@@ -1,14 +1,18 @@
 from flask import request, jsonify
 from app_combined_server import app, db
 from models import User, InviteCode
-import hashlib, hmac, uuid
+import hashlib
+import hmac
+import uuid as uuidlib
 from datetime import datetime
 
-BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
+BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"  # замените при необходимости
 
 def check_telegram_auth(data):
     auth_data = data.copy()
-    hash_check = auth_data.pop("hash")
+    hash_check = auth_data.pop("hash", None)
+    if not hash_check:
+        return False
     auth_data_sorted = sorted([f"{k}={v}" for k, v in auth_data.items()])
     data_check_string = "\n".join(auth_data_sorted)
     secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
@@ -21,8 +25,8 @@ def telegram_login():
     if not check_telegram_auth(data):
         return {"error": "invalid auth"}, 403
 
-    user_id = str(data["id"])
-    existing = User.query.filter_by(username=user_id).first()
+    telegram_id = int(data["id"])
+    existing = User.query.filter_by(telegram_id=telegram_id).first()
     if existing:
         return jsonify({"uuid": existing.uuid})
 
@@ -34,7 +38,14 @@ def telegram_login():
     if not invite or (invite.expires_at and invite.expires_at < datetime.utcnow()) or (invite.max_uses and invite.uses >= invite.max_uses):
         return {"error": "invalid invite"}, 400
 
-    new_user = User(uuid=str(uuid.uuid4()), username=user_id, role=invite.role)
+    new_user = User(
+        uuid=str(uuidlib.uuid4()),
+        telegram_id=telegram_id,
+        first_name=data.get("first_name"),
+        username=data.get("username"),
+        role=invite.role
+    )
+
     invite.uses += 1
 
     db.session.add(new_user)
