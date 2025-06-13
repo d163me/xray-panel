@@ -4,7 +4,7 @@ export default function InviteGenerator() {
   const [invite, setInvite] = useState(null);
 
   const generate = () => {
-    fetch("/api/invite/generate", {
+    fetch("/api/invite/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ max_uses: 3, days_valid: 7 }),

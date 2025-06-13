@@ -4,7 +4,7 @@ export default function LoginPage() {
   useEffect(() => {
     window.TelegramLoginWidget = {
       dataOnauth: async function (user) {
-        const invite = prompt("Введите инвайт-код");
+        const invite = prompt("Введите инвайт-код:");
         const res = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -15,13 +15,14 @@ export default function LoginPage() {
           localStorage.setItem("uuid", result.uuid);
           window.location.reload();
         } else {
-          alert("Ошибка авторизации");
+          alert("Ошибка авторизации: " + (result.error || "неизвестная"));
         }
       },
     };
+
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?7";
-    script.setAttribute("data-telegram-login", "YOUR_BOT_USERNAME"); // замените на @your_bot
+    script.setAttribute("data-telegram-login", "hydrich_bot"); // замените на имя бота
     script.setAttribute("data-size", "large");
     script.setAttribute("data-userpic", "false");
     script.setAttribute("data-request-access", "write");
