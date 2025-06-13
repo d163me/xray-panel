@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from app_combined_server import app
-from models import db, Invite
+from models import db, InviteCode as Invite
 from datetime import datetime, timedelta
 import secrets
 
