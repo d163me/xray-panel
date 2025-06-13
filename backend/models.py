@@ -17,3 +17,8 @@ class User(db.Model):
     uuid = db.Column(db.String, unique=True)
     role = db.Column(db.String, default='user')  # 'user', 'vip', 'admin'
     created_at = db.Column(db.DateTime, default=db.func.now())
+class Server(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False)
+    ip = db.Column(db.String, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
