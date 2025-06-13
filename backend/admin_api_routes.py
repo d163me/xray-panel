@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from app_combined_server import app, db
-from models import User, Invite
+from models import User, InviteCode
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
