@@ -3,7 +3,7 @@
 set -e
 
 PORT=8880
-DOMAIN="$(hostname -I | awk '{print $1}')"
+DOMAIN="hydrich.online"  # ← Впиши свой настоящий домен
 EMAIL="admin@$DOMAIN"
 
 apt update && apt install -y python3 python3-venv nginx curl socat git unzip
