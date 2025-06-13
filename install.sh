@@ -32,7 +32,7 @@ WantedBy=multi-user.target
 EOF
 
 # Python и панель
-cd /opt && git clone https://github.com/YOURUSERNAME/xray-panel.git || true
+cd /opt && git clone https://github.com/d163me/xray-panel.git || true
 cd xray-panel
 python3 -m venv venv
 source venv/bin/activate
