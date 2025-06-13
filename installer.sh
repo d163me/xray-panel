@@ -1,77 +1,107 @@
 #!/bin/bash
 
-# Marzban Fork Installer - One Command Setup
-# Требования: Ubuntu 20.04+, Python 3.10+, Git, curl
-
 set -e
 
-echo "[+] Обновление системы..."
-apt update && apt upgrade -y
+REPO_URL="https://github.com/d163me/xray-panel.git"
+APP_DIR="/opt/marzban-fork"
+BACKEND_DIR="$APP_DIR/backend"
+INSTANCE_DIR="$BACKEND_DIR/instance"
+DB_FILE="$INSTANCE_DIR/db.sqlite"
+SERVICE_NAME="marzban-backend"
+DOMAIN="hydrich.online"  # <- Задайте ваш домен
 
-echo "[+] Установка зависимостей..."
+echo "[1/8] Обновление системы и установка зависимостей..."
+apt update -y && apt upgrade -y
 apt install -y git curl python3 python3-venv python3-pip nginx sqlite3
 
-echo "[+] Установка Node.js 18..."
+echo "[2/8] Установка Node.js 18..."
 curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 apt install -y nodejs
 
-echo "[+] Подготовка каталога..."
-if [ -d /opt/marzban-fork ]; then
-  echo "[i] /opt/marzban-fork уже существует, делаем git pull..."
-  cd /opt/marzban-fork
-  git pull
+echo "[3/8] Клонирование или обновление репозитория..."
+if [ -d "$APP_DIR" ]; then
+  echo "    📂 $APP_DIR найден, обновляем..."
+  cd "$APP_DIR"
+  git pull origin main
 else
-  echo "[+] Клонируем проект..."
-  git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
-  cd /opt/marzban-fork
+  echo "    📂 Клонируем репозиторий в $APP_DIR..."
+  git clone "$REPO_URL" "$APP_DIR"
 fi
 
-echo "[+] Настройка Python backend..."
-cd backend
+echo "[4/8] Настройка Python-бэкенда..."
+cd "$BACKEND_DIR"
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install --no-cache-dir -r requirements.txt
 
-echo "[+] Запуск backend через systemd..."
-cat > /etc/systemd/system/marzban-backend.service <<EOF
+echo "[   ] Подготовка файла базы данных..."
+mkdir -p "$INSTANCE_DIR"
+touch "$DB_FILE"
+chmod 755 "$INSTANCE_DIR"
+chmod 664 "$DB_FILE"
+
+echo "[   ] Инициализация схемы БД..."
+python3 <<EOF
+import os
+from flask import Flask
+from flask_cors import CORS
+from db import db
+
+# создаём приложение с абсолютным путём к БД
+app = Flask(__name__)
+basedir = os.path.abspath(os.path.dirname(__file__))
+db_path = os.path.join(basedir, "instance", "db.sqlite")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+CORS(app)
+db.init_app(app)
+with app.app_context():
+    db.create_all()
+print("    ✅ Схема БД создана в", db_path)
+EOF
+deactivate
+
+echo "[5/8] Настройка systemd-сервиса..."
+cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Marzban Fork Backend
 After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/opt/marzban-fork/backend
-ExecStart=/opt/marzban-fork/backend/venv/bin/python app_combined_server.py
+WorkingDirectory=$BACKEND_DIR
+ExecStart=$BACKEND_DIR/venv/bin/python $BACKEND_DIR/app_combined_server.py
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reexec
-systemctl enable marzban-backend
-systemctl restart marzban-backend
+systemctl daemon-reload
+systemctl enable $SERVICE_NAME
+systemctl restart $SERVICE_NAME
 
-cd ..
-echo "[+] Настройка frontend..."
-cd frontend
-npm install
+echo "[6/8] Сборка фронтенда..."
+cd "$APP_DIR/frontend"
+npm install --no-audit --no-fund
 npm run build
 
-echo "[+] Настройка nginx..."
-cat > /etc/nginx/sites-enabled/marzban <<EOF
+echo "[7/8] Настройка nginx..."
+cat > /etc/nginx/sites-available/marzban <<EOF
 server {
     listen 80;
-    server_name hydrich.online;
+    server_name $DOMAIN;
+
+    root $APP_DIR/frontend/dist;
+    index index.html;
 
     location / {
-        root /opt/marzban-fork/frontend/dist;
-        index index.html index.htm;
         try_files \$uri \$uri/ /index.html;
     }
 
     location /api/ {
-        proxy_pass http://localhost:8000/api/;
+        proxy_pass http://127.0.0.1:8000/api/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -80,7 +110,9 @@ server {
 }
 EOF
 
+ln -sf /etc/nginx/sites-available/marzban /etc/nginx/sites-enabled/marzban
+rm -f /etc/nginx/sites-enabled/default
 systemctl restart nginx
 
-echo ""
-echo "[✔] Установка завершена! Перейдите на http://your.domain.com"
+echo "[8/8] Установка и настройка завершены!"
+echo "Перейдите в браузере на http://$DOMAIN и проверьте работу панели."
