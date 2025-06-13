@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Marzban Fork Installer - One Command Setup
-# Требования: Ubuntu 20.04+, Python 3.10+, Git, NodeJS (для фронта)
+# Требования: Ubuntu 20.04+, Python 3.10+, Git, curl
 
 set -e
 
@@ -11,9 +11,20 @@ apt update && apt upgrade -y
 echo "[+] Установка зависимостей..."
 apt install -y git curl python3 python3-venv python3-pip nginx sqlite3
 
-echo "[+] Клонируем проект..."
-git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
-cd /opt/marzban-fork
+echo "[+] Установка Node.js 18..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+apt install -y nodejs
+
+echo "[+] Подготовка каталога..."
+if [ -d /opt/marzban-fork ]; then
+  echo "[i] /opt/marzban-fork уже существует, делаем git pull..."
+  cd /opt/marzban-fork
+  git pull
+else
+  echo "[+] Клонируем проект..."
+  git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
+  cd /opt/marzban-fork
+fi
 
 echo "[+] Настройка Python backend..."
 cd backend
@@ -21,7 +32,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-echo "[+] Запуск backend на systemd..."
+echo "[+] Запуск backend через systemd..."
 cat > /etc/systemd/system/marzban-backend.service <<EOF
 [Unit]
 Description=Marzban Fork Backend
@@ -39,7 +50,7 @@ EOF
 
 systemctl daemon-reexec
 systemctl enable marzban-backend
-systemctl start marzban-backend
+systemctl restart marzban-backend
 
 cd ..
 echo "[+] Настройка frontend..."
@@ -71,4 +82,5 @@ EOF
 
 systemctl restart nginx
 
+echo ""
 echo "[✔] Установка завершена! Перейдите на http://your.domain.com"
