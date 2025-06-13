@@ -1,25 +1,11 @@
-from app_combined_server import db
-from datetime import datetime
-from sqlalchemy.dialects.sqlite import JSON
+from flask_sqlalchemy import SQLAlchemy
+db = SQLAlchemy()
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    uuid = db.Column(db.String, unique=True, nullable=False)
-    role = db.Column(db.String, default="user")
-    username = db.Column(db.String, nullable=True)
-
-class InviteCode(db.Model):
+class Invite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String, unique=True, nullable=False)
-    used_by = db.Column(JSON, default=list)
+    role = db.Column(db.String, default='user')  # 👈 добавлено
+    max_uses = db.Column(db.Integer, nullable=False)
     uses = db.Column(db.Integer, default=0)
-    max_uses = db.Column(db.Integer, default=1)
-    expires_at = db.Column(db.DateTime, nullable=True)
-
-class Server(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String, unique=True)
-    ip = db.Column(db.String)
-    path = db.Column(db.String)
-    note = db.Column(db.String)
-    active = db.Column(db.Boolean, default=True)
+    expires_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=db.func.now())
