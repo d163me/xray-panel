@@ -1,17 +1,26 @@
 #!/bin/bash
-
 set -e
 
-PORT=8880
-DOMAIN="hydrich.online"  # ← Впиши свой настоящий домен
-EMAIL="admin@$DOMAIN"
+# === Ввод данных ===
+read -p "Введите домен (например, proxy.example.com): " DOMAIN
+DOMAIN=${DOMAIN:-proxy.example.com}
+
+read -p "Введите email для Let's Encrypt: " EMAIL
+EMAIL=${EMAIL:-admin@$DOMAIN}
+
+read -p "Введите порт для панели (по умолчанию 8880): " PORT
+PORT=${PORT:-8880}
+
+echo "Используем домен: $DOMAIN"
+echo "Email для сертификата: $EMAIL"
+echo "Порт панели: $PORT"
 
 apt update && apt install -y python3 python3-venv nginx curl socat git unzip
 
 # Установка Xray
 mkdir -p /opt/xray-core && cd /opt/xray-core
 curl -LO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip Xray-linux-64.zip && chmod +x xray
+unzip -o Xray-linux-64.zip && chmod +x xray
 
 # Создание пользователя xray
 useradd -r -s /bin/false xray || true
@@ -31,8 +40,10 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
-# Python и панель
-cd /opt && git clone https://github.com/d163me/xray-panel.git || true
+# Клонирование панели
+cd /opt
+rm -rf xray-panel
+git clone https://github.com/d163me/xray-panel.git
 cd xray-panel
 python3 -m venv venv
 source venv/bin/activate
@@ -55,7 +66,6 @@ WantedBy=multi-user.target
 EOF
 
 # Конфиг Xray
-mkdir -p /opt/xray-core
 cat > /opt/xray-core/config.json << EOF
 {
   "inbounds": [
@@ -90,7 +100,7 @@ systemctl enable xray-panel --now
 apt install -y certbot python3-certbot-nginx
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL || true
 
-# Настройка nginx
+# Конфиг nginx
 cat > /etc/nginx/sites-available/xray << EOF
 server {
     listen 80;
@@ -122,7 +132,9 @@ server {
     }
 }
 EOF
-ln -s /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray || true
+
+ln -sf /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
 nginx -t && systemctl restart nginx
 
-echo "✅ Установка завершена. Панель доступна по https://$DOMAIN"
+echo ""
+echo "✅ Установка завершена. Панель доступна по адресу: https://$DOMAIN"
