@@ -2,50 +2,23 @@
 
 set -e
 
-echo "🔧 Введите ваш домен (example.com):"
-read DOMAIN
-
 echo "📦 Установка зависимостей..."
-apt update
-apt install -y nginx certbot python3-certbot-nginx git curl unzip python3-venv
+apt update && apt install -y nginx certbot python3-pip unzip curl socat
 
-echo "📁 Установка Xray..."
-mkdir -p /opt/xray-core
-cd /opt/xray-core
-curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip xray.zip && rm xray.zip
-chmod +x xray
+echo "🐍 Установка Flask..."
+pip3 install flask
 
-echo "📦 Установка панели..."
-mkdir -p /opt/xray-panel/templates
-cat > /opt/xray-panel/templates/index.html <<EOF
-<!DOCTYPE html>
-<html>
-<head><title>Xray Panel</title></head>
-<body>
-  <h1>Панель работает!</h1>
-  <p>vless://UUID@$DOMAIN:443?encryption=none&security=tls&type=ws&host=$DOMAIN&path=%2Fvless#Xray</p>
-</body>
-</html>
-EOF
+echo "📁 Создание директорий..."
+mkdir -p /opt/xray-core /opt/xray-panel/templates /var/www/html
 
-cat > /opt/xray-panel/panel.py <<EOF
-from flask import Flask, render_template
-app = Flask(__name__, template_folder="templates")
-@app.route("/")
-def index():
-    return render_template("index.html")
-if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8880)
-EOF
-
-echo "📦 Установка Python-зависимостей..."
-python3 -m venv /opt/xray-panel/venv
-/opt/xray-panel/venv/bin/pip install flask
+echo "⬇️ Загрузка Xray..."
+curl -L -o /tmp/Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+unzip -o /tmp/Xray-linux-64.zip -d /opt/xray-core
+chmod +x /opt/xray-core/xray
 
 echo "🧾 Генерация UUID..."
-UUID=\$(cat /proc/sys/kernel/random/uuid)
-echo "UUID: \$UUID"
+UUID=$(cat /proc/sys/kernel/random/uuid)
+echo "UUID: $UUID"
 
 cat > /opt/xray-core/config.json <<EOF
 {
@@ -53,19 +26,25 @@ cat > /opt/xray-core/config.json <<EOF
     "port": 10000,
     "protocol": "vless",
     "settings": {
-      "clients": [{"id": "\$UUID"}],
+      "clients": [{
+        "id": "$UUID"
+      }],
       "decryption": "none"
     },
     "streamSettings": {
       "network": "ws",
-      "wsSettings": {"path": "/vless"}
+      "wsSettings": {
+        "path": "/vless"
+      }
     }
   }],
-  "outbounds": [{"protocol": "freedom"}]
+  "outbounds": [{
+    "protocol": "freedom"
+  }]
 }
 EOF
 
-echo "⚙️ Настройка systemd для Xray..."
+echo "📝 Создание systemd сервиса для Xray..."
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service
@@ -79,26 +58,11 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
-echo "⚙️ Настройка systemd для панели..."
-cat > /etc/systemd/system/xray-panel.service <<EOF
-[Unit]
-Description=Xray Panel
-After=network.target
-
-[Service]
-ExecStart=/opt/xray-panel/venv/bin/python /opt/xray-panel/panel.py
-WorkingDirectory=/opt/xray-panel
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "⚙️ Настройка Nginx..."
+echo "🌐 Настройка Nginx..."
 cat > /etc/nginx/sites-available/xray <<EOF
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name hydrich.online;
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -110,29 +74,29 @@ server {
 }
 EOF
 
-ln -s /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
+ln -sf /etc/nginx/sites-available/xray /etc/nginx/sites-enabled/xray
+nginx -t && systemctl restart nginx
 
-echo "🔒 Получение SSL сертификата..."
-certbot --nginx --non-interactive --agree-tos --email admin@$DOMAIN -d $DOMAIN
+echo "🔐 Получение SSL сертификата..."
+certbot certonly --webroot -w /var/www/html -d hydrich.online --agree-tos --email your@email.com --non-interactive
 
-echo "🔁 Настройка HTTPS в Nginx..."
+echo "🔁 Перенастройка Nginx на HTTPS..."
 cat > /etc/nginx/sites-available/xray <<EOF
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name hydrich.online;
     return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name $DOMAIN;
+    server_name hydrich.online;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/hydrich.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hydrich.online/privkey.pem;
 
     location /vless {
+        proxy_redirect off;
         proxy_pass http://127.0.0.1:10000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -151,11 +115,47 @@ EOF
 
 nginx -t && systemctl reload nginx
 
-echo "🚀 Запуск служб..."
+echo "🌐 Создание панели управления..."
+cat > /opt/xray-panel/panel.py <<EOF
+from flask import Flask, render_template
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+app.run(host='0.0.0.0', port=8880)
+EOF
+
+cat > /opt/xray-panel/templates/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>Xray Panel</title></head>
+<body>
+  <h1>Подключение через VLESS</h1>
+  <p><code>vless://$UUID@hydrich.online:443?encryption=none&security=tls&type=ws&host=hydrich.online&path=%2Fvless#Xray</code></p>
+</body>
+</html>
+EOF
+
+echo "📝 Создание systemd сервиса для панели..."
+cat > /etc/systemd/system/xray-panel.service <<EOF
+[Unit]
+Description=Xray Panel
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/xray-panel/panel.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "🚀 Запуск сервисов..."
 systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable --now xray
-systemctl enable --now xray-panel
+systemctl enable xray xray-panel
+systemctl restart xray xray-panel
 
-echo "✅ Установка завершена: https://$DOMAIN"
-echo "🔗 VLESS: vless://\$UUID@$DOMAIN:443?encryption=none&security=tls&type=ws&host=$DOMAIN&path=%2Fvless#Xray"
+echo "✅ Установка завершена: https://hydrich.online"
