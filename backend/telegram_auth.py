@@ -1,13 +1,12 @@
 from flask import request, jsonify
-from app_combined_server import app
-from db import db  # Импортируем db из db.py
+from app_combined_server import app, db
 from models import User, InviteCode
 import hashlib
 import hmac
+from datetime import datetime, timedelta
 import uuid as uuidlib
-from datetime import datetime
 
-BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
+BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"  # ОБЯЗАТЕЛЬНО замени на свой!
 
 def check_telegram_auth(data):
     auth_data = data.copy()
@@ -16,11 +15,25 @@ def check_telegram_auth(data):
     data_check_string = "\n".join(auth_data_sorted)
     secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
     hmac_obj = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256)
-    return hmac_obj.hexdigest() == hash_check
+
+    is_valid = hmac_obj.hexdigest() == hash_check
+
+    # Проверка времени аутентификации, не старше 1 дня
+    auth_date = int(data.get("auth_date", 0))
+    if datetime.utcnow() - datetime.utcfromtimestamp(auth_date) > timedelta(days=1):
+        is_valid = False
+
+    print("Telegram auth data:", data)
+    print("Computed hash:", hmac_obj.hexdigest())
+    print("Received hash:", hash_check)
+    print("Auth valid:", is_valid)
+
+    return is_valid
 
 @app.route("/api/auth/telegram", methods=["POST"])
 def telegram_login():
     data = request.json
+    print("Telegram auth POST data:", data)
     if not check_telegram_auth(data):
         return {"error": "invalid auth"}, 403
 
@@ -43,6 +56,8 @@ def telegram_login():
         username=user_id
     )
     invite.uses += 1
+    # Если у InviteCode есть поле used_by — добавь здесь, иначе убери:
+    # invite.used_by.append(new_user.uuid)
 
     db.session.add(new_user)
     db.session.commit()
