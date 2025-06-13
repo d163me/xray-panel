@@ -8,7 +8,8 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 def generate_vless_link(uuid_str, username):
-    domain = "yourdomain.com"
+    import socket
+domain = socket.gethostname()
     return f"vless://{uuid_str}@{domain}:443?encryption=none&security=tls&type=ws&host={domain}&path=%2Fvless#{username}"
 
 def add_client_to_config(uuid_str, email):
