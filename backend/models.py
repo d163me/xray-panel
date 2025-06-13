@@ -22,3 +22,10 @@ class Server(db.Model):
     name = db.Column(db.String, nullable=False)
     ip = db.Column(db.String, nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
+class TrafficLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_uuid = db.Column(db.String, nullable=False)
+    timestamp = db.Column(db.DateTime, default=db.func.now())
+    rx = db.Column(db.BigInteger, default=0)  # входящий
+    tx = db.Column(db.BigInteger, default=0)  # исходящий
+
