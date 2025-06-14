@@ -2,90 +2,81 @@
 
 set -e
 
-REPO_URL="https://github.com/d163me/xray-panel.git"
-APP_DIR="/opt/marzban-fork"
-BACKEND_DIR="$APP_DIR/backend"
-FRONTEND_DIR="$APP_DIR/frontend"
-INSTANCE_DIR="$BACKEND_DIR/instance"
-DB_FILE="$INSTANCE_DIR/db.sqlite"
+echo -e "\n📦 [1/8] Удаление старой версии и остановка процессов..."
 
-echo "[0/8] Остановка старых процессов..."
-pkill -f "python app_combined_server.py" || true
+sudo systemctl stop marzban-backend.service || true
+pkill -f app_combined_server.py || true
 pkill -f "npm run dev" || true
-sleep 2
+rm -rf /opt/marzban-fork
 
-echo "[1/8] Удаление предыдущей установки..."
-rm -rf "$APP_DIR"
+echo -e "\n⬇️ [2/8] Клонирование репозитория..."
+git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
 
-echo "[2/8] Установка системных зависимостей..."
-apt update -y && apt upgrade -y
-apt install -y git curl python3 python3-venv python3-pip nginx sqlite3
-
-echo "[3/8] Установка Node.js 18..."
-curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt install -y nodejs
-
-echo "[4/8] Клонирование последней версии проекта..."
-git clone "$REPO_URL" "$APP_DIR"
-
-echo "[5/8] Настройка Python-бэкенда..."
-cd "$BACKEND_DIR"
+echo -e "\n🐍 [3/8] Настройка Python-бэкенда..."
+cd /opt/marzban-fork/backend
 python3 -m venv venv
 source venv/bin/activate
-pip install --no-cache-dir -r requirements.txt
+pip install -r requirements.txt
 
-echo "[6/8] Инициализация базы данных и создание администратора..."
-mkdir -p "$INSTANCE_DIR"
-touch "$DB_FILE"
+echo -e "\n🧪 [4/8] Обновление vite.config.js..."
+sed -i 's/allowedHosts: \[[^]]*\]/allowedHosts: ["hydrich.online"]/' /opt/marzban-fork/frontend/vite.config.js || \
+echo 'export default defineConfig({ server: { allowedHosts: ["hydrich.online"] } })' > /opt/marzban-fork/frontend/vite.config.js
 
-cat <<EOF | python3
-import os
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from werkzeug.security import generate_password_hash
+echo -e "\n🌐 [5/8] Установка конфигурации nginx..."
+cat > /etc/nginx/sites-available/hydrich.online <<EOF
+server {
+    listen 80;
+    server_name hydrich.online;
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-instance_path = os.path.join(basedir, "backend", "instance")
-db_path = os.path.join(instance_path, "db.sqlite")
-os.makedirs(instance_path, exist_ok=True)
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
 
-app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-CORS(app)
-db = SQLAlchemy(app)
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
+EOF
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="user")
+ln -sf /etc/nginx/sites-available/hydrich.online /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
 
+echo -e "\n🧬 [6/8] Инициализация базы и создание администратора..."
+cd /opt/marzban-fork/backend
+source venv/bin/activate
+python <<EOF
+from app_combined_server import db, app
+from models import User
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username="admin").first():
-        admin = User(username="admin", password_hash=generate_password_hash("123456"), role="admin")
-        db.session.add(admin)
+        user = User(username="admin", password="123456")
+        db.session.add(user)
         db.session.commit()
-        print("✅ Пользователь 'admin' создан с паролем '123456'")
+        print("✅ Пользователь admin создан.")
     else:
         print("ℹ️ Пользователь 'admin' уже существует.")
 EOF
 
-echo "[7/8] Установка зависимостей frontend..."
-cd "$FRONTEND_DIR"
+echo -e "\n🧱 [7/8] Установка frontend-зависимостей..."
+cd /opt/marzban-fork/frontend
 npm install
 
-echo "[8/8] Запуск backend и frontend..."
-cd "$BACKEND_DIR"
+echo -e "\n🚀 [8/8] Автозапуск backend и frontend..."
+cd /opt/marzban-fork/backend
 source venv/bin/activate
 nohup python app_combined_server.py > backend.log 2>&1 &
 
-cd "$FRONTEND_DIR"
+cd /opt/marzban-fork/frontend
 nohup npm run dev > frontend.log 2>&1 &
 
-echo ""
-echo "✅ Установка завершена и всё запущено!"
-echo "🌐 Панель доступна по адресу: http://<IP_или_домен>:5173"
-echo "🔐 Логин: admin | Пароль: 123456"
+echo -e "\n✅ Установка завершена и всё запущено!"
+echo -e "🌐 Панель доступна по адресу: http://hydrich.online"
+echo -e "🔐 Логин: admin | Пароль: 123456"
