@@ -19,8 +19,19 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 echo -e "\n🧪 [4/8] Обновление vite.config.js..."
-sed -i 's/allowedHosts: \[[^]]*\]/allowedHosts: ["hydrich.online"]/' /opt/marzban-fork/frontend/vite.config.js || \
-echo 'export default defineConfig({ server: { allowedHosts: ["hydrich.online"] } })' > /opt/marzban-fork/frontend/vite.config.js
+cat > /opt/marzban-fork/frontend/vite.config.js <<EOF
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: true,
+    port: 5173,
+    allowedHosts: ['hydrich.online']
+  }
+})
+EOF
 
 echo -e "\n🌐 [5/8] Установка конфигурации nginx..."
 cat > /etc/nginx/sites-available/hydrich.online <<EOF
@@ -54,6 +65,7 @@ source venv/bin/activate
 python <<EOF
 from app_combined_server import db, app
 from models import User
+
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username="admin").first():
