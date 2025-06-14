@@ -45,10 +45,15 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
 from models import User
 
-basedir = os.path.abspath("backend")
-instance_path = os.path.join(basedir, "instance")
+# Абсолютный путь к базе данных
+basedir = os.path.abspath(os.path.dirname(__file__))
+instance_path = os.path.join(basedir, "backend", "instance")
 db_path = os.path.join(instance_path, "db.sqlite")
 
+# Создаём папку, если нужно
+os.makedirs(instance_path, exist_ok=True)
+
+# Flask app + DB
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
