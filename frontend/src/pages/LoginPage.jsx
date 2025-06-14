@@ -17,7 +17,7 @@ export default function LoginPage() {
   useEffect(() => {
     window.TelegramLoginWidget = {
       dataOnauth: async function (user) {
-        console.log("Telegram user:", user);
+        console.log("✅ Telegram user:", user);
 
         let invite = getUrlParam("invite") || localStorage.getItem("invite");
         if (!invite) {
@@ -29,32 +29,40 @@ export default function LoginPage() {
           localStorage.setItem("invite", invite);
         }
 
+        const client_uuid = uuidv4();
         const body = {
           ...user,
           invite,
-          client_uuid: uuidv4(),
+          client_uuid,
         };
 
-        const res = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        console.log("📦 Запрос на бэкенд:", body); // ← выводим, что отправим
 
-        const result = await res.json();
-        if (res.ok && result.uuid) {
-          localStorage.setItem("uuid", result.uuid);
-          window.location.reload();
-        } else {
-          alert("Ошибка авторизации: " + (result.error || "unknown"));
+        try {
+          const res = await fetch("/api/auth/telegram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          const result = await res.json();
+          if (res.ok && result.uuid) {
+            localStorage.setItem("uuid", result.uuid);
+            window.location.reload();
+          } else {
+            alert("Ошибка авторизации: " + (result.error || "unknown"));
+          }
+        } catch (err) {
+          console.error("❌ Ошибка запроса:", err);
+          alert("Ошибка соединения с сервером.");
         }
       }
     };
 
-    // вставляем Telegram login виджет
+    // вставка Telegram-виджета
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", "hydrich_bot"); // без @
+    script.setAttribute("data-telegram-login", "hydrich_bot");
     script.setAttribute("data-size", "large");
     script.setAttribute("data-userpic", "false");
     script.setAttribute("data-request-access", "write");
