@@ -2,6 +2,10 @@
 
 set -e
 
+echo -e "\n🔧 [0/8] Установка системных пакетов (python3-venv, git, nodejs и др.)..."
+apt update -y
+apt install -y python3 python3-venv python3-pip git curl nginx nodejs npm
+
 echo "🚀 Установка xray-panel..."
 
 # [1/8] Остановка старых процессов
