@@ -9,30 +9,32 @@ FRONTEND_DIR="$APP_DIR/frontend"
 INSTANCE_DIR="$BACKEND_DIR/instance"
 DB_FILE="$INSTANCE_DIR/db.sqlite"
 
-echo "[1/8] Установка зависимостей..."
+echo "[0/8] Остановка старых процессов..."
+pkill -f "python app_combined_server.py" || true
+pkill -f "npm run dev" || true
+sleep 2
+
+echo "[1/8] Удаление предыдущей установки..."
+rm -rf "$APP_DIR"
+
+echo "[2/8] Установка системных зависимостей..."
 apt update -y && apt upgrade -y
 apt install -y git curl python3 python3-venv python3-pip nginx sqlite3
 
-echo "[2/8] Установка Node.js 18..."
+echo "[3/8] Установка Node.js 18..."
 curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 apt install -y nodejs
 
-echo "[3/8] Клонирование или обновление проекта..."
-if [ -d "$APP_DIR" ]; then
-  echo "    📂 $APP_DIR найден, обновляем..."
-  cd "$APP_DIR"
-  git pull origin main
-else
-  git clone "$REPO_URL" "$APP_DIR"
-fi
+echo "[4/8] Клонирование последней версии проекта..."
+git clone "$REPO_URL" "$APP_DIR"
 
-echo "[4/8] Установка Python-зависимостей..."
+echo "[5/8] Настройка Python-бэкенда..."
 cd "$BACKEND_DIR"
 python3 -m venv venv
 source venv/bin/activate
 pip install --no-cache-dir -r requirements.txt
 
-echo "[5/8] Инициализация базы и создание администратора..."
+echo "[6/8] Инициализация базы данных и создание администратора..."
 mkdir -p "$INSTANCE_DIR"
 touch "$DB_FILE"
 
@@ -71,16 +73,15 @@ with app.app_context():
         print("ℹ️ Пользователь 'admin' уже существует.")
 EOF
 
-echo "[6/8] Установка frontend-зависимостей..."
+echo "[7/8] Установка зависимостей frontend..."
 cd "$FRONTEND_DIR"
 npm install
 
-echo "[7/8] Автозапуск backend..."
+echo "[8/8] Запуск backend и frontend..."
 cd "$BACKEND_DIR"
 source venv/bin/activate
 nohup python app_combined_server.py > backend.log 2>&1 &
 
-echo "[8/8] Автозапуск frontend (Vite)..."
 cd "$FRONTEND_DIR"
 nohup npm run dev > frontend.log 2>&1 &
 
