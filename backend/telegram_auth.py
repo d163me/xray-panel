@@ -1,4 +1,3 @@
-# telegram_auth.py
 from flask import request, jsonify
 from app_combined_server import app, db
 from models import User, InviteCode
@@ -7,6 +6,7 @@ import hmac
 import uuid as uuidlib
 from datetime import datetime
 
+# Токен бота (ZAMENI NA SVOY)
 BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
 
 def check_telegram_auth(data):
@@ -22,35 +22,39 @@ def check_telegram_auth(data):
 
 @app.route("/api/auth/telegram", methods=["POST"])
 def telegram_login():
-    data = request.json
-    if not data or not check_telegram_auth(data):
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "no data"}), 400
+
+    if not check_telegram_auth(data):
         return jsonify({"error": "invalid auth"}), 403
 
     telegram_id = data.get("id")
-    username = str(telegram_id)
+    username = str(telegram_id) if telegram_id else None
+    if not username:
+        return jsonify({"error": "missing id"}), 400
 
-    existing_user = User.query.filter_by(username=username).first()
-    if existing_user:
-        return jsonify({"uuid": existing_user.uuid})
+    existing = User.query.filter_by(username=username).first()
+    if existing:
+        return jsonify({"uuid": existing.uuid})
 
     invite_code = data.get("invite")
     if not invite_code:
         return jsonify({"error": "no invite"}), 400
 
     invite = InviteCode.query.filter_by(code=invite_code).first()
-    if not invite or \
-       (invite.expires_at and invite.expires_at < datetime.utcnow()) or \
-       (invite.max_uses and invite.uses >= invite.max_uses):
+    if not invite or (invite.expires_at and invite.expires_at < datetime.utcnow()) or (invite.max_uses and invite.uses >= invite.max_uses):
         return jsonify({"error": "invalid invite"}), 400
 
     new_user = User(
-        telegram_id=telegram_id,
-        username=username,
         uuid=str(uuidlib.uuid4()),
+        telegram_id=telegram_id,
+        first_name=data.get("first_name"),
+        username=username,
         role=invite.role or "user"
     )
-
     invite.uses += 1
+
     db.session.add(new_user)
     db.session.commit()
 
