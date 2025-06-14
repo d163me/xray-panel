@@ -40,31 +40,36 @@ touch "$DB_FILE"
 cat <<EOF | python3
 import os
 from flask import Flask
-from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash
-from models import User
 
-# Абсолютный путь к базе данных
+# Настройка путей
 basedir = os.path.abspath(os.path.dirname(__file__))
 instance_path = os.path.join(basedir, "backend", "instance")
 db_path = os.path.join(instance_path, "db.sqlite")
-
-# Создаём папку, если нужно
 os.makedirs(instance_path, exist_ok=True)
 
-# Flask app + DB
+# Flask-приложение
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 CORS(app)
 db = SQLAlchemy(app)
 
+# Модель пользователя
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="user")
+
+# Инициализация
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username="admin").first():
-        user = User(username="admin", password_hash=generate_password_hash("123456"), role="admin")
-        db.session.add(user)
+        admin = User(username="admin", password_hash=generate_password_hash("123456"), role="admin")
+        db.session.add(admin)
         db.session.commit()
         print("✅ Пользователь 'admin' создан с паролем '123456'")
     else:
