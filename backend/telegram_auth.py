@@ -1,13 +1,16 @@
-from flask import request, jsonify
-from app_combined_server import app, db
-from models import User, InviteCode
+import os
 import hashlib
 import hmac
 import uuid as uuidlib
 from datetime import datetime
+from flask import request, jsonify
+from app_combined_server import app, db
+from models import User, InviteCode
+from dotenv import load_dotenv
 
-# Токен бота (ZAMENI NA SVOY)
-BOT_TOKEN = "8190122776:AAG0A12leBj0Xb7IaWu0swq74v7WU_oLuBQ"
+# Загрузка переменных из .env
+load_dotenv()
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 def check_telegram_auth(data):
     auth_data = data.copy()
@@ -39,23 +42,7 @@ def telegram_login():
         return jsonify({"uuid": existing.uuid})
 
     invite_code = data.get("invite")
-    if not invite_code:
-        return jsonify({"error": "no invite"}), 400
+    client_uuid = data.get("client_uuid")
 
-    invite = InviteCode.query.filter_by(code=invite_code).first()
-    if not invite or (invite.expires_at and invite.expires_at < datetime.utcnow()) or (invite.max_uses and invite.uses >= invite.max_uses):
-        return jsonify({"error": "invalid invite"}), 400
-
-    new_user = User(
-        uuid=str(uuidlib.uuid4()),
-        telegram_id=telegram_id,
-        first_name=data.get("first_name"),
-        username=username,
-        role=invite.role or "user"
-    )
-    invite.uses += 1
-
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({"uuid": new_user.uuid})
+    if not invite_code or not client_uuid:
+        return jsonify({"error": "missing i
