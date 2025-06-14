@@ -1,15 +1,26 @@
+import os
 from flask import Flask
 from flask_cors import CORS
-from db import db  # Импортируем один экземпляр SQLAlchemy
+from db import db   # ваш единственный экземпляр SQLAlchemy
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/db.sqlite"
+
+# Абсолютный путь к папке backend
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
+INSTANCE_DIR = os.path.join(BASEDIR, "instance")
+DB_PATH = os.path.join(INSTANCE_DIR, "db.sqlite")
+
+# Убедимся, что папка instance существует
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 CORS(app)
-db.init_app(app)  # Инициализируем SQLAlchemy с приложением
+db.init_app(app)
 
-# Импортируем API-маршруты после создания app и db
+# импортируем модели и роуты после init_app
+from models import *   # InviteCode, User, Server
 from admin_api_routes import *
 from invite_api import *
 from traffic_api import *
