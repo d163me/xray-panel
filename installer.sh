@@ -3,7 +3,6 @@
 set -e
 
 echo -e "\n📦 [1/8] Удаление старой версии и остановка процессов..."
-
 sudo systemctl stop marzban-backend.service || true
 pkill -f app_combined_server.py || true
 pkill -f "npm run dev" || true
@@ -64,12 +63,13 @@ cd /opt/marzban-fork/backend
 source venv/bin/activate
 python <<EOF
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from models import User
+from models import db, User
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite3"
-db = SQLAlchemy(app)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db.init_app(app)
 
 with app.app_context():
     db.create_all()
