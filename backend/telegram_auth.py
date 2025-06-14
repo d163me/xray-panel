@@ -7,9 +7,10 @@ from flask import request, jsonify
 from app_combined_server import app, db
 from models import User, InviteCode
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Загрузка переменных из .env
-load_dotenv()
+# Явно указываем путь до .env
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 def check_telegram_auth(data):
