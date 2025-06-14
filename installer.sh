@@ -38,17 +38,19 @@ mkdir -p "$INSTANCE_DIR"
 touch "$DB_FILE"
 
 cat <<EOF | python3
-from app_combined_server import db
+from app_combined_server import app, db
 from models import User
 from werkzeug.security import generate_password_hash
-db.create_all()
-if not User.query.filter_by(username="admin").first():
-    user = User(username="admin", password_hash=generate_password_hash("123456"), role="admin")
-    db.session.add(user)
-    db.session.commit()
-    print("✅ Пользователь 'admin' создан с паролем '123456'")
-else:
-    print("ℹ️ Пользователь 'admin' уже существует.")
+
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username="admin").first():
+        user = User(username="admin", password_hash=generate_password_hash("123456"), role="admin")
+        db.session.add(user)
+        db.session.commit()
+        print("✅ Пользователь 'admin' создан с паролем '123456'")
+    else:
+        print("ℹ️ Пользователь 'admin' уже существует.")
 EOF
 
 echo "[6/7] Установка зависимостей frontend..."
