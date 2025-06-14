@@ -45,4 +45,5 @@ def telegram_login():
     client_uuid = data.get("client_uuid")
 
     if not invite_code or not client_uuid:
-        return jsonify({"error": "missing i
+        return jsonify({"error": "missing invite or uuid"}), 400
+
