@@ -1,82 +1,65 @@
-import { useEffect } from "react";
-
-// UUID v4
-function uuidv4() {
-  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)
-  );
-}
-
-function getUrlParam(key) {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(key);
-}
+import { useState } from "react";
 
 export default function LoginPage() {
-  useEffect(() => {
-    // глобальный обработчик авторизации Telegram
-    window.TelegramLoginWidget = {
-      dataOnauth: async function (user) {
-        console.log("✅ Telegram user:", user);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
-        let invite = getUrlParam("invite") || localStorage.getItem("invite");
-        if (!invite) {
-          invite = prompt("Введите инвайт-код:");
-          if (!invite) {
-            alert("Инвайт обязателен.");
-            return;
-          }
-          localStorage.setItem("invite", invite);
-        }
+  const login = async (e) => {
+    e.preventDefault();
 
-        const client_uuid = uuidv4();
-        const body = {
-          ...user,
-          invite,
-          client_uuid,
-        };
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
 
-        console.log("📦 Запрос на бэкенд:", body);
+    const result = await res.json();
 
-        try {
-          const res = await fetch("/api/auth/telegram", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-
-          const result = await res.json();
-          if (res.ok && result.uuid) {
-            localStorage.setItem("uuid", result.uuid);
-            window.location.reload();
-          } else {
-            alert("Ошибка авторизации: " + (result.error || "unknown"));
-          }
-        } catch (err) {
-          console.error("❌ Ошибка запроса:", err);
-          alert("Ошибка соединения с сервером.");
-        }
-      }
-    };
-
-    // корректное добавление Telegram script
-    const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", "hydrich_bot");
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-request-access", "write");
-    script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
-    script.async = true;
-
-    const container = document.getElementById("telegram-login-container");
-    container.innerHTML = ""; // очищаем повторный скрипт
-    container.appendChild(script);
-  }, []);
+    if (res.ok && result.uuid) {
+      localStorage.setItem("uuid", result.uuid);
+      window.location.reload();
+    } else {
+      alert("Ошибка входа: " + (result.error || "unknown"));
+    }
+  };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div id="telegram-login-container"></div>
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <form
+        onSubmit={login}
+        className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 w-96"
+      >
+        <h2 className="text-2xl mb-4 font-bold text-center">Вход</h2>
+
+        <label className="block text-gray-700 text-sm font-bold mb-2">
+          Логин
+        </label>
+        <input
+          className="shadow appearance-none border rounded w-full py-2 px-3 mb-4 text-gray-700"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+
+        <label className="block text-gray-700 text-sm font-bold mb-2">
+          Пароль
+        </label>
+        <input
+          className="shadow appearance-none border rounded w-full py-2 px-3 mb-6 text-gray-700"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+
+        <button
+          type="submit"
+          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded w-full"
+        >
+          Войти
+        </button>
+      </form>
     </div>
   );
 }

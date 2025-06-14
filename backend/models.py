@@ -1,28 +1,16 @@
-from db import db
+from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import uuid
 
-class InviteCode(db.Model):  # используется в telegram_auth.py
-    __tablename__ = 'invite'
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String, unique=True, nullable=False)
-    role = db.Column(db.String, default='user')
-    max_uses = db.Column(db.Integer, nullable=False)
-    uses = db.Column(db.Integer, default=0)
-    expires_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # Если используешь used_by (список UUIDs), добавь здесь колонку, например JSON или TEXT
+db = SQLAlchemy()
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
-    first_name = db.Column(db.String)
-    username = db.Column(db.String)
-    uuid = db.Column(db.String, unique=True)
-    role = db.Column(db.String, default='user')  # 'user', 'vip', 'admin'
+    uuid = db.Column(db.String(36), default=lambda: str(uuid.uuid4()), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(20), default="user")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-class Server(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String, nullable=False)
-    ip = db.Column(db.String, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    def __repr__(self):
+        return f"<User {self.username}>"
