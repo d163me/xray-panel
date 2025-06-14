@@ -7,11 +7,14 @@ from flask import request, jsonify
 from app_combined_server import app, db
 from models import User, InviteCode
 from dotenv import load_dotenv
-from pathlib import Path
 
-# Явно указываем путь до .env
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+# ⬇️ Явная загрузка .env по абсолютному пути
+load_dotenv(dotenv_path="/opt/marzban-fork/backend/.env")
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+# ⬇️ Отладочный вывод
+print("🔑 BOT_TOKEN =", BOT_TOKEN)
 
 def check_telegram_auth(data):
     auth_data = data.copy()
@@ -48,3 +51,27 @@ def telegram_login():
     if not invite_code or not client_uuid:
         return jsonify({"error": "missing invite or uuid"}), 400
 
+    invite = InviteCode.query.filter_by(code=invite_code).first()
+    if not invite:
+        return jsonify({"error": "invalid invite"}), 400
+    if invite.expires_at and invite.expires_at < datetime.utcnow():
+        return jsonify({"error": "invite expired"}), 400
+    if invite.max_uses and invite.uses >= invite.max_uses:
+        return jsonify({"error": "invite maxed out"}), 400
+
+    new_user = User(
+        uuid=client_uuid,
+        role="user",
+        username=username
+    )
+
+    invite.uses += 1
+    if invite.used_by:
+        invite.used_by += f",{client_uuid}"
+    else:
+        invite.used_by = client_uuid
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"uuid": new_user.uuid})
