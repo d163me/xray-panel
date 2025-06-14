@@ -1,13 +1,12 @@
 import { useEffect } from "react";
 
-// простая функция UUID v4
+// UUID v4
 function uuidv4() {
   return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
     (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)
   );
 }
 
-// извлекаем параметр из URL
 function getUrlParam(key) {
   const params = new URLSearchParams(window.location.search);
   return params.get(key);
@@ -15,6 +14,7 @@ function getUrlParam(key) {
 
 export default function LoginPage() {
   useEffect(() => {
+    // глобальный обработчик авторизации Telegram
     window.TelegramLoginWidget = {
       dataOnauth: async function (user) {
         console.log("✅ Telegram user:", user);
@@ -36,7 +36,7 @@ export default function LoginPage() {
           client_uuid,
         };
 
-        console.log("📦 Запрос на бэкенд:", body); // ← выводим, что отправим
+        console.log("📦 Запрос на бэкенд:", body);
 
         try {
           const res = await fetch("/api/auth/telegram", {
@@ -59,7 +59,7 @@ export default function LoginPage() {
       }
     };
 
-    // вставка Telegram-виджета
+    // корректное добавление Telegram script
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.setAttribute("data-telegram-login", "hydrich_bot");
@@ -69,7 +69,9 @@ export default function LoginPage() {
     script.setAttribute("data-onauth", "TelegramLoginWidget.dataOnauth(user)");
     script.async = true;
 
-    document.getElementById("telegram-login-container").appendChild(script);
+    const container = document.getElementById("telegram-login-container");
+    container.innerHTML = ""; // очищаем повторный скрипт
+    container.appendChild(script);
   }, []);
 
   return (
