@@ -63,8 +63,13 @@ echo -e "\n🧬 [6/8] Инициализация базы и создание а
 cd /opt/marzban-fork/backend
 source venv/bin/activate
 python <<EOF
-from app_combined_server import db, app
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
 from models import User
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite3"
+db = SQLAlchemy(app)
 
 with app.app_context():
     db.create_all()
