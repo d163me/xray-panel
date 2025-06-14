@@ -1,45 +1,57 @@
 import { useEffect } from "react";
 
-// простая функция v4 UUID
+// простая функция UUID v4
 function uuidv4() {
   return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c/4)))).toString(16)
+    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)
   );
+}
+
+// извлекаем параметр из URL
+function getUrlParam(key) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(key);
 }
 
 export default function LoginPage() {
   useEffect(() => {
-    // глобальный хендлер
     window.TelegramLoginWidget = {
       dataOnauth: async function (user) {
         console.log("Telegram user:", user);
-        const invite = prompt("Введите инвайт-код:");
-        console.log("Invite code:", invite);
 
-        const body = { ...user, invite, client_uuid: uuidv4() };
-
-        try {
-          const res = await fetch("/api/auth/telegram", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-
-          const result = await res.json();
-          if (res.ok && result.uuid) {
-            localStorage.setItem("uuid", result.uuid);
-            window.location.reload();
-          } else {
-            alert("Ошибка авторизации: " + (result.error || "unknown"));
+        let invite = getUrlParam("invite") || localStorage.getItem("invite");
+        if (!invite) {
+          invite = prompt("Введите инвайт-код:");
+          if (!invite) {
+            alert("Инвайт обязателен.");
+            return;
           }
-        } catch (err) {
-          console.error(err);
-          alert("Ошибка сети или сервера.");
+          localStorage.setItem("invite", invite);
+        }
+
+        const body = {
+          ...user,
+          invite,
+          client_uuid: uuidv4(),
+        };
+
+        const res = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const result = await res.json();
+        if (res.ok && result.uuid) {
+          localStorage.setItem("uuid", result.uuid);
+          window.location.reload();
+        } else {
+          alert("Ошибка авторизации: " + (result.error || "unknown"));
         }
       }
     };
 
-    // вставка виджета Telegram
+    // вставляем Telegram login виджет
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.setAttribute("data-telegram-login", "hydrich_bot"); // без @
