@@ -38,9 +38,22 @@ mkdir -p "$INSTANCE_DIR"
 touch "$DB_FILE"
 
 cat <<EOF | python3
-from app_combined_server import app, db
-from models import User
+import os
+from flask import Flask
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
+from models import User
+
+basedir = os.path.abspath("backend")
+instance_path = os.path.join(basedir, "instance")
+db_path = os.path.join(instance_path, "db.sqlite")
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+CORS(app)
+db = SQLAlchemy(app)
 
 with app.app_context():
     db.create_all()
