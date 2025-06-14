@@ -17,8 +17,8 @@ rm -rf /opt/marzban-fork
 echo -e "\n📥 [3/8] Клонирование репозитория..."
 git clone https://github.com/d163me/xray-panel /opt/marzban-fork
 
-# [3.5/8] Автонастройка vite.config.js
-echo -e "\n🌐 [3.5/8] Конфигурация Vite (разрешаем hydrich.online)..."
+# [3.5/8] Автонастройка vite.config.js с разрешением всех хостов
+echo -e "\n🌐 [3.5/8] Конфигурация Vite (разрешаем все хосты)..."
 cat > /opt/marzban-fork/frontend/vite.config.js <<EOF
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -28,7 +28,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['hydrich.online'],
+    allowedHosts: 'all',
   }
 })
 EOF
@@ -75,6 +75,7 @@ nohup /opt/marzban-fork/backend/venv/bin/python /opt/marzban-fork/backend/app_co
 
 # [8/8] Автозапуск frontend
 echo -e "\n⚙️ [8/8] Автозапуск frontend (Vite)..."
+pkill -f "npm run dev" || true
 cd /opt/marzban-fork/frontend
 nohup npm run dev > /opt/frontend.log 2>&1 &
 
