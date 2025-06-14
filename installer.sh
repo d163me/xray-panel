@@ -1,68 +1,80 @@
 #!/bin/bash
 
-set -e
+# Путь установки
+INSTALL_DIR=/opt/xray-proxy-panel
 
-echo "🚀 Установка xray-panel..."
+# Удаление старой версии
+if [ -d "$INSTALL_DIR" ]; then
+    echo "Удаляю старую версию..."
+    pkill -f flask
+    pkill -f vite
+    rm -rf "$INSTALL_DIR"
+fi
 
-echo -e "\n🛑 [1/8] Остановка старых процессов..."
-pkill -f "npm run dev" || true
-pkill -f "app_combined_server.py" || true
+# Установка зависимостей
+apt update && apt install -y python3 python3-venv git curl nodejs npm
 
-echo -e "\n🧹 [2/8] Удаление старой версии..."
-rm -rf /opt/marzban-fork
+# Создание структуры
+mkdir -p "$INSTALL_DIR"
 
-echo -e "\n📥 [3/8] Клонирование репозитория..."
-git clone https://github.com/d163me/xray-panel.git /opt/marzban-fork
-
-echo -e "\n🌐 [3.5/8] Конфигурация Vite (разрешаем все хосты)..."
-sed -i "s/server.allowedHosts = \[\]/server.allowedHosts = \[\"hydrich.online\"\]/" /opt/marzban-fork/frontend/vite.config.js
-
-echo -e "\n🔧 [4/8] Настройка Python-бэкенда..."
-apt update
-apt install -y python3-venv python3-pip git nginx curl
-
-# Удаляем старые версии nodejs и npm
-apt remove -y nodejs npm || true
-apt autoremove -y || true
-
-# Установка Node.js 18 и npm через NodeSource
-curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt install -y nodejs
-
-cd /opt/marzban-fork/backend
-
+# Backend setup
+cd "$INSTALL_DIR"
 python3 -m venv venv
 source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+pip install flask flask-cors
 
-echo -e "\n🧬 [5/8] Инициализация базы и создание администратора..."
-python3 <<EOF
-from app_combined_server import db, app, User
-with app.app_context():
-    db.create_all()
-    admin = User.query.filter_by(username='admin').first()
-    if not admin:
-        admin = User(username='admin', password='123456')
-        db.session.add(admin)
-        db.session.commit()
-        print("✅ Пользователь admin создан.")
-    else:
-        print("ℹ️ Пользователь 'admin' уже существует.")
+cat <<EOF > backend.py
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+app = Flask(__name__)
+CORS(app)
+
+@app.route('/create_proxy', methods=['POST'])
+def create_proxy():
+    proxy_name = request.json.get('name')
+    # Здесь логика создания конфига Xray (упрощенно)
+    proxy_link = f"vmess://{proxy_name}@example.com:443"
+    return jsonify({"proxy": proxy_link})
+
+app.run(host='0.0.0.0', port=5000)
 EOF
 
-echo -e "\n📦 [6/8] Установка frontend-зависимостей..."
-cd /opt/marzban-fork/frontend
-npm install
+nohup flask run &
 
-echo -e "\n🚀 [7/8] Автозапуск backend..."
-cd /opt/marzban-fork/backend
-nohup ./venv/bin/python app_combined_server.py > backend.log 2>&1 &
+# Frontend setup
+npm create vite@latest frontend -- --template react
+cd frontend
+npm install axios
 
-echo -e "\n🚀 [8/8] Автозапуск frontend (Vite)..."
-cd /opt/marzban-fork/frontend
-nohup npm run dev > frontend.log 2>&1 &
+cat <<EOF > src/App.jsx
+import { useState } from 'react'
+import axios from 'axios'
 
-echo -e "\n✅ Установка завершена и всё запущено!"
-echo "🌐 Панель доступна по адресу: http://hydrich.online:5173"
-echo "🔐 Логин: admin | Пароль: 123456"
+function App() {
+  const [name, setName] = useState('')
+  const [proxy, setProxy] = useState('')
+
+  const createProxy = async () => {
+    const response = await axios.post('http://localhost:5000/create_proxy', { name })
+    setProxy(response.data.proxy)
+  }
+
+  return (
+    <div>
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+      <button onClick={createProxy}>Создать прокси</button>
+      {proxy && <p>Ваш прокси: {proxy}</p>}
+    </div>
+  )
+}
+
+export default App
+EOF
+
+nohup npm run dev -- --host &
+
+# Установка Xray (упрощенно)
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)"
+
+clear
+echo "✅ Панель успешно установлена!"
